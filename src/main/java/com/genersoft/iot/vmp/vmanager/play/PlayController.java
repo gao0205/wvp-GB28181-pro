@@ -5,6 +5,7 @@ import com.alibaba.fastjson.JSONArray;
 import com.genersoft.iot.vmp.common.StreamInfo;
 import com.genersoft.iot.vmp.conf.MediaServerConfig;
 import com.genersoft.iot.vmp.media.zlm.ZLMRESTfulUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +42,10 @@ public class PlayController {
 
 	@Value("${media.closeWaitRTPInfo}")
 	private boolean closeWaitRTPInfo;
+    @Value("${media.internetIp}")
+    private String internetIp;
+    @Value("${media.internetPort}")
+    private String internetPort;
 
 	@GetMapping("/play/{deviceId}/{channelId}")
 	public ResponseEntity<String> play(@PathVariable String deviceId, @PathVariable String channelId,
@@ -108,10 +113,17 @@ public class PlayController {
 				}
 			}
 		} else {
-			String flv = storager.getMediaInfo().getWanIp() + ":" + storager.getMediaInfo().getHttpPort() + "/rtp/"
-					+ streamId + ".flv";
-			streamInfo.setFlv("http://" + flv);
-			streamInfo.setWs_flv("ws://" + flv);
+            if (StringUtils.isBlank(internetIp)) {
+                String flv = storager.getMediaInfo().getLocalIP() + ":" + storager.getMediaInfo().getHttpPort() + "/rtp/"
+                        + streamId + ".flv";
+                streamInfo.setFlv("http://" + flv);
+                streamInfo.setWs_flv("ws://" + flv);
+            } else {
+                String flv = internetIp + ":" + internetPort + "/rtp/"
+                        + streamId + ".flv";
+                streamInfo.setFlv("https://" + flv);
+                streamInfo.setWs_flv("wss://" + flv);
+            }
 			storager.startPlay(streamInfo);
 		}
 

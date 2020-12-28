@@ -96,7 +96,7 @@ public class ZLMRunner implements CommandLineRunner {
             hookIP = "127.0.0.1";
         }
 
-        String hookPrex = String.format("http://%s:%s/index/hook", hookIP, serverPort);
+        String hookPrex = String.format("https://%s:%s/index/hook", hookIP, serverPort);
         Map<String, Object> param = new HashMap<>();
         param.put("api.secret",mediaSecret); // -profile:v Baseline
         param.put("ffmpeg.cmd","%s -fflags nobuffer -rtsp_transport tcp -i %s -c:a aac -strict -2 -ar 44100 -ab 48k -c:v libx264  -f flv %s");
@@ -114,7 +114,7 @@ public class ZLMRunner implements CommandLineRunner {
         param.put("hook.on_stream_changed",String.format("%s/on_stream_changed", hookPrex));
         param.put("hook.on_stream_none_reader",String.format("%s/on_stream_none_reader", hookPrex));
         param.put("hook.on_stream_not_found",String.format("%s/on_stream_not_found", hookPrex));
-        param.put("hook.timeoutSec","20");
+        param.put("hook.timeoutSec","10");
         param.put("general.streamNoneReaderDelayMS",streamNoneReaderDelayMS);
 
         JSONObject responseJSON = zlmresTfulUtils.setServerConfig(param);
