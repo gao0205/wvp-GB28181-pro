@@ -84,10 +84,10 @@ public class SIPRequestHeaderProvider {
 		SipURI requestLine = sipFactory.createAddressFactory().createSipURI(channelId, host.getAddress());
 		//via
 		ArrayList<ViaHeader> viaHeaders = new ArrayList<ViaHeader>();
-		// ViaHeader viaHeader = sipFactory.createHeaderFactory().createViaHeader(sipConfig.getSipIp(), sipConfig.getSipPort(), device.getTransport(), viaTag);
 		ViaHeader viaHeader = sipFactory.createHeaderFactory().createViaHeader(device.getHost().getIp(), device.getHost().getPort(), device.getTransport(), viaTag);
 		viaHeader.setRPort();
 		viaHeaders.add(viaHeader);
+
 		//from
 		SipURI fromSipURI = sipFactory.createAddressFactory().createSipURI(sipConfig.getSipId(),sipConfig.getSipDomain());
 		Address fromAddress = sipFactory.createAddressFactory().createAddress(fromSipURI);
@@ -129,9 +129,8 @@ public class SIPRequestHeaderProvider {
 		Host host = device.getHost();
 		//请求行
 		SipURI requestLine = sipFactory.createAddressFactory().createSipURI(device.getDeviceId(), host.getAddress());
-		//via
+		// via
 		ArrayList<ViaHeader> viaHeaders = new ArrayList<ViaHeader>();
-		// ViaHeader viaHeader = sipFactory.createHeaderFactory().createViaHeader(sipConfig.getSipIp(), sipConfig.getSipPort(), device.getTransport(), viaTag);
 		ViaHeader viaHeader = sipFactory.createHeaderFactory().createViaHeader(device.getHost().getIp(), device.getHost().getPort(), device.getTransport(), viaTag);
 		viaHeader.setRPort();
 		viaHeaders.add(viaHeader);

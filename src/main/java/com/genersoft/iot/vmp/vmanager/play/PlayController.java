@@ -4,8 +4,11 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.genersoft.iot.vmp.common.StreamInfo;
 import com.genersoft.iot.vmp.conf.MediaServerConfig;
+import com.genersoft.iot.vmp.gb28181.transmit.callback.DeferredResultHolder;
+import com.genersoft.iot.vmp.gb28181.transmit.callback.RequestMessage;
 import com.genersoft.iot.vmp.media.zlm.ZLMRESTfulUtils;
-import org.apache.commons.lang3.StringUtils;
+import com.genersoft.iot.vmp.media.zlm.ZLMRTPServerFactory;
+import com.genersoft.iot.vmp.vmanager.service.IPlayService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +26,11 @@ import com.alibaba.fastjson.JSONObject;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.impl.SIPCommander;
 import com.genersoft.iot.vmp.storager.IVideoManagerStorager;
+import org.springframework.web.context.request.async.DeferredResult;
+
+import javax.sip.message.Response;
+import java.text.DecimalFormat;
+import java.util.UUID;
 
 @CrossOrigin
 @RestController
@@ -40,122 +48,89 @@ public class PlayController {
 	@Autowired
 	private ZLMRESTfulUtils zlmresTfulUtils;
 
-	@Value("${media.closeWaitRTPInfo}")
-	private boolean closeWaitRTPInfo;
-    @Value("${media.internetIp}")
-    private String internetIp;
-    @Value("${media.internetPort}")
-    private String internetPort;
+	@Autowired
+	private DeferredResultHolder resultHolder;
+
+	@Autowired
+	private IPlayService playService;
 
 	@GetMapping("/play/{deviceId}/{channelId}")
-	public ResponseEntity<String> play(@PathVariable String deviceId, @PathVariable String channelId,
-	Integer getEncoding) {
+	public DeferredResult<ResponseEntity<String>> play(@PathVariable String deviceId,
+													   @PathVariable String channelId) {
 
-		if (getEncoding == null) getEncoding = 0;
-		getEncoding = closeWaitRTPInfo ?  0 : getEncoding;
+
 		Device device = storager.queryVideoDevice(deviceId);
 		StreamInfo streamInfo = storager.queryPlayByDevice(deviceId, channelId);
 
+		UUID uuid = UUID.randomUUID();
+		DeferredResult<ResponseEntity<String>> result = new DeferredResult<ResponseEntity<String>>();
+
+		// 录像查询以channelId作为deviceId查询
+		resultHolder.put(DeferredResultHolder.CALLBACK_CMD_PlAY + uuid, result);
+
 		if (streamInfo == null) {
-			streamInfo = cmder.playStreamCmd(device, channelId);
+			// 发送点播消息
+			cmder.playStreamCmd(device, channelId, (JSONObject response) -> {
+				logger.info("收到订阅消息： " + response.toJSONString());
+				playService.onPublishHandlerForPlay(response, deviceId, channelId, uuid.toString());
+			}, event -> {
+				RequestMessage msg = new RequestMessage();
+				msg.setId(DeferredResultHolder.CALLBACK_CMD_PlAY + uuid);
+				Response response = event.getResponse();
+				msg.setData(String.format("点播失败， 错误码： %s, %s", response.getStatusCode(), response.getReasonPhrase()));
+				resultHolder.invokeResult(msg);
+			});
 		} else {
-			String streamId = String.format("%08x", Integer.parseInt(streamInfo.getSsrc())).toUpperCase();
+			String streamId = streamInfo.getStreamId();
 			JSONObject rtpInfo = zlmresTfulUtils.getRtpInfo(streamId);
 			if (rtpInfo.getBoolean("exist")) {
-				return new ResponseEntity<String>(JSON.toJSONString(streamInfo), HttpStatus.OK);
+				RequestMessage msg = new RequestMessage();
+				msg.setId(DeferredResultHolder.CALLBACK_CMD_PlAY + uuid);
+				msg.setData(JSON.toJSONString(streamInfo));
+				resultHolder.invokeResult(msg);
 			} else {
 				storager.stopPlay(streamInfo);
-				streamInfo = cmder.playStreamCmd(device, channelId);
+				cmder.playStreamCmd(device, channelId, (JSONObject response) -> {
+					logger.info("收到订阅消息： " + response.toJSONString());
+					playService.onPublishHandlerForPlay(response, deviceId, channelId, uuid.toString());
+				}, event -> {
+					RequestMessage msg = new RequestMessage();
+					msg.setId(DeferredResultHolder.CALLBACK_CMD_PlAY + uuid);
+					Response response = event.getResponse();
+					msg.setData(String.format("点播失败， 错误码： %s, %s", response.getStatusCode(), response.getReasonPhrase()));
+					resultHolder.invokeResult(msg);
+				});
 			}
 		}
-		String streamId = String.format("%08x", Integer.parseInt(streamInfo.getSsrc())).toUpperCase();
-		// 等待推流, TODO 默认超时30s
-		boolean lockFlag = true;
-		boolean rtpPushed = false;
-		long startTime = System.currentTimeMillis();
-		JSONObject rtpInfo = null;
 
-		if (getEncoding == 1) {
-			while (lockFlag) {
-				try {
-					if (System.currentTimeMillis() - startTime > 60 * 1000) {
-						storager.stopPlay(streamInfo);
-						logger.info("播放等待超时");
-						return new ResponseEntity<String>("timeout", HttpStatus.OK);
-					} else {
-						streamInfo = storager.queryPlayByDevice(deviceId, channelId);
-						if (!rtpPushed) {
-							logger.info("查询RTP推流信息...");
-							rtpInfo = zlmresTfulUtils.getRtpInfo(streamId);
-						}
-						if (rtpInfo != null && rtpInfo.getBoolean("exist") && streamInfo != null
-								&& streamInfo.getFlv() != null) {
-							logger.info("查询流编码信息：" + streamInfo.getFlv());
-							rtpPushed = true;
-							Thread.sleep(2000);
-							JSONObject mediaInfo = zlmresTfulUtils.getMediaInfo("rtp", "rtmp", streamId);
-							if (mediaInfo.getInteger("code") == 0 && mediaInfo.getBoolean("online")) {
-								lockFlag = false;
-								logger.info("流编码信息已获取");
-								JSONArray tracks = mediaInfo.getJSONArray("tracks");
-								streamInfo.setTracks(tracks);
-								storager.startPlay(streamInfo);
-							} else {
-								logger.info("流编码信息未获取，2秒后重试...");
-							}
-						} else {
-							Thread.sleep(2000);
-							continue;
-						}
-					}
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
-		} else {
-            if (StringUtils.isBlank(internetIp)) {
-                String flv = storager.getMediaInfo().getLocalIP() + ":" + storager.getMediaInfo().getHttpPort() + "/rtp/"
-                        + streamId + ".flv";
-                streamInfo.setFlv("http://" + flv);
-                streamInfo.setWs_flv("ws://" + flv);
-            } else {
-                String flv = internetIp + ":" + internetPort + "/rtp/"
-                        + streamId + ".flv";
-                streamInfo.setFlv("https://" + flv);
-                streamInfo.setWs_flv("wss://" + flv);
-            }
-			storager.startPlay(streamInfo);
-		}
-
-		if (logger.isDebugEnabled()) {
-			logger.debug(String.format("设备预览 API调用，deviceId：%s ，channelId：%s", deviceId, channelId));
-			logger.debug("设备预览 API调用，ssrc：" + streamInfo.getSsrc() + ",ZLMedia streamId:"
-					+ Integer.toHexString(Integer.parseInt(streamInfo.getSsrc())));
-		}
-
-		if (streamInfo != null) {
-			return new ResponseEntity<String>(JSON.toJSONString(streamInfo), HttpStatus.OK);
-		} else {
-			logger.warn("设备预览API调用失败！");
-			return new ResponseEntity<String>(HttpStatus.INTERNAL_SERVER_ERROR);
-		}
+		// 超时处理
+		result.onTimeout(()->{
+			logger.warn(String.format("设备点播超时，deviceId：%s ，channelId：%s", deviceId, channelId));
+			// 释放rtpserver
+			cmder.closeRTPServer(device, channelId);
+			RequestMessage msg = new RequestMessage();
+			msg.setId(DeferredResultHolder.CALLBACK_CMD_PlAY + uuid);
+			msg.setData("Timeout");
+			resultHolder.invokeResult(msg);
+		});
+		return result;
 	}
 
-	@PostMapping("/play/{ssrc}/stop")
-	public ResponseEntity<String> playStop(@PathVariable String ssrc) {
+	@PostMapping("/play/{streamId}/stop")
+	public ResponseEntity<String> playStop(@PathVariable String streamId) {
 
-		cmder.streamByeCmd(ssrc);
-		StreamInfo streamInfo = storager.queryPlayBySSRC(ssrc);
+		cmder.streamByeCmd(streamId);
+		StreamInfo streamInfo = storager.queryPlayByStreamId(streamId);
 		if (streamInfo == null)
-			return new ResponseEntity<String>("ssrc not found", HttpStatus.OK);
+			return new ResponseEntity<String>("streamId not found", HttpStatus.OK);
 		storager.stopPlay(streamInfo);
 		if (logger.isDebugEnabled()) {
-			logger.debug(String.format("设备预览停止API调用，ssrc：%s", ssrc));
+			logger.debug(String.format("设备预览停止API调用，streamId：%s", streamId));
 		}
 
-		if (ssrc != null) {
+		if (streamId != null) {
 			JSONObject json = new JSONObject();
-			json.put("ssrc", ssrc);
+			json.put("streamId", streamId);
 			return new ResponseEntity<String>(json.toString(), HttpStatus.OK);
 		} else {
 			logger.warn("设备预览停止API调用失败！");
@@ -165,17 +140,16 @@ public class PlayController {
 
 	/**
 	 * 将不是h264的视频通过ffmpeg 转码为h264 + aac
-	 * @param ssrc
+	 * @param streamId 流ID
 	 * @return
 	 */
-	@PostMapping("/play/{ssrc}/convert")
-	public ResponseEntity<String> playConvert(@PathVariable String ssrc) {
-		StreamInfo streamInfo = storager.queryPlayBySSRC(ssrc);
+	@PostMapping("/play/{streamId}/convert")
+	public ResponseEntity<String> playConvert(@PathVariable String streamId) {
+		StreamInfo streamInfo = storager.queryPlayByStreamId(streamId);
 		if (streamInfo == null) {
 			logger.warn("视频转码API调用失败！, 视频流已经停止!");
 			return new ResponseEntity<String>("未找到视频流信息, 视频流可能已经停止", HttpStatus.OK);
 		}
-		String streamId = String.format("%08x", Integer.parseInt(ssrc)).toUpperCase();
 		JSONObject rtpInfo = zlmresTfulUtils.getRtpInfo(streamId);
 		if (!rtpInfo.getBoolean("exist")) {
 			logger.warn("视频转码API调用失败！, 视频流已停止推流!");
@@ -184,17 +158,28 @@ public class PlayController {
 			MediaServerConfig mediaInfo = storager.getMediaInfo();
 			String dstUrl = String.format("rtmp://%s:%s/convert/%s", "127.0.0.1", mediaInfo.getRtmpPort(),
 					streamId );
-			JSONObject jsonObject = zlmresTfulUtils.addFFmpegSource(streamInfo.getRtsp(), dstUrl, "1000000");
+			String srcUrl = String.format("rtsp://%s:%s/rtp/%s", "127.0.0.1", mediaInfo.getRtspPort(), streamId);
+			JSONObject jsonObject = zlmresTfulUtils.addFFmpegSource(srcUrl, dstUrl, "1000000");
 			System.out.println(jsonObject);
 			JSONObject result = new JSONObject();
 			if (jsonObject != null && jsonObject.getInteger("code") == 0) {
 				   result.put("code", 0);
 				JSONObject data = jsonObject.getJSONObject("data");
 				if (data != null) {
-				   result.put("key", data.getString("key"));
-					result.put("rtmp", dstUrl);
-					result.put("flv", String.format("http://%s:%s/convert/%s.flv", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
-					result.put("ws_flv", String.format("ws://%s:%s/convert/%s.flv", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+				   	result.put("key", data.getString("key"));
+					StreamInfo streamInfoResult = new StreamInfo();
+					streamInfoResult.setRtmp(dstUrl);
+					streamInfoResult.setRtsp(String.format("rtsp://%s:%s/convert/%s", mediaInfo.getWanIp(), mediaInfo.getRtspPort(), streamId));
+					streamInfoResult.setStreamId(streamId);
+					streamInfoResult.setFlv(String.format("http://%s:%s/convert/%s.flv", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+					streamInfoResult.setWs_flv(String.format("ws://%s:%s/convert/%s.flv", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+					streamInfoResult.setHls(String.format("http://%s:%s/convert/%s/hls.m3u8", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+					streamInfoResult.setWs_hls(String.format("ws://%s:%s/convert/%s/hls.m3u8", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+					streamInfoResult.setFmp4(String.format("http://%s:%s/convert/%s.live.mp4", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+					streamInfoResult.setWs_fmp4(String.format("ws://%s:%s/convert/%s.live.mp4", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+					streamInfoResult.setTs(String.format("http://%s:%s/convert/%s.live.ts", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+					streamInfoResult.setWs_ts(String.format("ws://%s:%s/convert/%s.live.ts", mediaInfo.getWanIp(), mediaInfo.getHttpPort(), streamId));
+					result.put("data", streamInfoResult);
 				}
 			}else {
 				result.put("code", 1);
