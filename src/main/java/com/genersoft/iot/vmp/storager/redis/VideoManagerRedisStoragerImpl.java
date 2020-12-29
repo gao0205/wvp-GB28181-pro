@@ -2,8 +2,6 @@ package com.genersoft.iot.vmp.storager.redis;
 
 import java.util.*;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
 import com.genersoft.iot.vmp.common.PageResult;
 import com.genersoft.iot.vmp.common.StreamInfo;
 import com.genersoft.iot.vmp.conf.MediaServerConfig;
@@ -383,7 +381,7 @@ public class VideoManagerRedisStoragerImpl implements IVideoManagerStorager {
 	 */
 	@Override
 	public boolean startPlay(StreamInfo stream) {
-		return redis.set(String.format("%S_%s_%s_%s", VideoManagerConstants.PLAYER_PREFIX, stream.getStreamId(),stream.getDeviceID(), stream.getCahnnelId()),
+		return redis.set(String.format("%S_%s_%s_%s", VideoManagerConstants.PLAYER_PREFIX, stream.getStreamId(),stream.getDeviceID(), stream.getChannelId()),
 				stream);
 	}
 
@@ -395,7 +393,7 @@ public class VideoManagerRedisStoragerImpl implements IVideoManagerStorager {
 	@Override
 	public boolean stopPlay(StreamInfo streamInfo) {
 		if (streamInfo == null) return false;
-		DeviceChannel deviceChannel = queryChannel(streamInfo.getDeviceID(), streamInfo.getCahnnelId());
+		DeviceChannel deviceChannel = queryChannel(streamInfo.getDeviceID(), streamInfo.getChannelId());
 		if (deviceChannel != null) {
 			deviceChannel.setStreamId(null);
 			deviceChannel.setPlay(false);
@@ -404,7 +402,7 @@ public class VideoManagerRedisStoragerImpl implements IVideoManagerStorager {
 		return redis.del(String.format("%S_%s_%s_%s", VideoManagerConstants.PLAYER_PREFIX,
 				streamInfo.getStreamId(),
 				streamInfo.getDeviceID(),
-				streamInfo.getCahnnelId()));
+				streamInfo.getChannelId()));
 	}
 
 	/**
@@ -417,7 +415,7 @@ public class VideoManagerRedisStoragerImpl implements IVideoManagerStorager {
 				VideoManagerConstants.PLAYER_PREFIX,
 				streamInfo.getStreamId(),
 				streamInfo.getDeviceID(),
-				streamInfo.getCahnnelId()));
+				streamInfo.getChannelId()));
 	}
 	@Override
 	public StreamInfo queryPlayByStreamId(String steamId) {
@@ -515,7 +513,7 @@ public class VideoManagerRedisStoragerImpl implements IVideoManagerStorager {
 		for (int i = 0; i < playLeys.size(); i++) {
 			String key = (String) playLeys.get(i);
 			StreamInfo streamInfo = (StreamInfo)redis.get(key);
-			streamInfos.put(streamInfo.getDeviceID() + "_" + streamInfo.getCahnnelId(), streamInfo);
+			streamInfos.put(streamInfo.getDeviceID() + "_" + streamInfo.getChannelId(), streamInfo);
 		}
 		return streamInfos;
 	}
@@ -523,7 +521,7 @@ public class VideoManagerRedisStoragerImpl implements IVideoManagerStorager {
 
 	@Override
 	public boolean startPlayback(StreamInfo stream) {
-		return redis.set(String.format("%S_%s_%s_%s", VideoManagerConstants.PLAY_BLACK_PREFIX, stream.getStreamId(),stream.getDeviceID(), stream.getCahnnelId()),
+		return redis.set(String.format("%S_%s_%s_%s", VideoManagerConstants.PLAY_BLACK_PREFIX, stream.getStreamId(),stream.getDeviceID(), stream.getChannelId()),
 				stream);
 	}
 
@@ -531,7 +529,7 @@ public class VideoManagerRedisStoragerImpl implements IVideoManagerStorager {
 	@Override
 	public boolean stopPlayback(StreamInfo streamInfo) {
 		if (streamInfo == null) return false;
-		DeviceChannel deviceChannel = queryChannel(streamInfo.getDeviceID(), streamInfo.getCahnnelId());
+		DeviceChannel deviceChannel = queryChannel(streamInfo.getDeviceID(), streamInfo.getChannelId());
 		if (deviceChannel != null) {
 			deviceChannel.setStreamId(null);
 			deviceChannel.setPlay(false);
@@ -540,7 +538,7 @@ public class VideoManagerRedisStoragerImpl implements IVideoManagerStorager {
 		return redis.del(String.format("%S_%s_%s_%s", VideoManagerConstants.PLAY_BLACK_PREFIX,
 				streamInfo.getStreamId(),
 				streamInfo.getDeviceID(),
-				streamInfo.getCahnnelId()));
+				streamInfo.getChannelId()));
 	}
 
 	@Override

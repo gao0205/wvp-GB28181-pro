@@ -19,11 +19,10 @@ public class AuthController {
     private String password;
 
     @RequestMapping("/login")
-    public Object devices(String username, String password){
-        if (!StringUtils.isEmpty(username) && username.equals(username)
-                && !StringUtils.isEmpty(password) && password.equals(password)) {
+    public Object devices(String username, String password) {
+        if (!StringUtils.isEmpty(username) && username.equals(this.username) && !StringUtils.isEmpty(password) && password.equals(this.password)) {
             return "success";
-        }else {
+        } else {
             return "fait";
         }
     }

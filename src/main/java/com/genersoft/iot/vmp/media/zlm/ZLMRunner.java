@@ -101,7 +101,7 @@ public class ZLMRunner implements CommandLineRunner {
             mediaHookIp = sipIP;
         }
 
-        String hookPrex = String.format("http://%s:%s/index/hook", mediaHookIp, serverPort);
+        String hookPrex = String.format("https://%s:%s/index/hook", mediaHookIp, serverPort);
         Map<String, Object> param = new HashMap<>();
         param.put("api.secret",mediaSecret); // -profile:v Baseline
         param.put("ffmpeg.cmd","%s -fflags nobuffer -rtsp_transport tcp -i %s -c:a aac -strict -2 -ar 44100 -ab 48k -c:v libx264  -f flv %s");

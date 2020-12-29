@@ -71,6 +71,9 @@ export default {
             that.$cookies.set("session", {"username": that.username}) ;
             //登录成功后
             that.$router.push('/');
+          } else {
+            that.$message.error('登录失败');
+            that.isLoging = false;
           }
       })
       .catch(function (error) {

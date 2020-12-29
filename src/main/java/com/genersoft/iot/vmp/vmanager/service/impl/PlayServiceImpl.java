@@ -7,14 +7,12 @@ import com.genersoft.iot.vmp.conf.MediaServerConfig;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.DeferredResultHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.RequestMessage;
 import com.genersoft.iot.vmp.storager.IVideoManagerStorager;
-import com.genersoft.iot.vmp.vmanager.play.PlayController;
 import com.genersoft.iot.vmp.vmanager.service.IPlayService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
-import java.text.DecimalFormat;
 
 @Service
 public class PlayServiceImpl implements IPlayService {
@@ -26,6 +24,12 @@ public class PlayServiceImpl implements IPlayService {
 
     @Autowired
     private DeferredResultHolder resultHolder;
+
+    @Value("${media.internetIp}")
+    private String internetIp;
+
+    @Value("${media.internetPort}")
+    private String internetPort;
 
     @Override
     public void onPublishHandlerForPlay(JSONObject resonse, String deviceId, String channelId, String uuid) {
@@ -64,23 +68,16 @@ public class PlayServiceImpl implements IPlayService {
         StreamInfo streamInfo = new StreamInfo();
         streamInfo.setStreamId(streamId);
         streamInfo.setDeviceID(deviceId);
-        streamInfo.setCahnnelId(channelId);
+        streamInfo.setChannelId(channelId);
         MediaServerConfig mediaServerConfig = storager.getMediaInfo();
 
-        streamInfo.setFlv(String.format("http://%s:%s/rtp/%s.flv", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
-        streamInfo.setWs_flv(String.format("ws://%s:%s/rtp/%s.flv", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
-
-        streamInfo.setFmp4(String.format("http://%s:%s/rtp/%s.live.mp4", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
-        streamInfo.setWs_fmp4(String.format("ws://%s:%s/rtp/%s.live.mp4", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
-
-        streamInfo.setHls(String.format("http://%s:%s/rtp/%s/hls.m3u8", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
-        streamInfo.setWs_hls(String.format("ws://%s:%s/rtp/%s/hls.m3u8", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
-
-        streamInfo.setTs(String.format("http://%s:%s/rtp/%s.live.ts", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
-        streamInfo.setWs_ts(String.format("ws://%s:%s/rtp/%s.live.ts", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
-
-        streamInfo.setRtmp(String.format("rtmp://%s:%s/rtp/%s", mediaServerConfig.getWanIp(), mediaServerConfig.getRtmpPort(), streamId));
-        streamInfo.setRtsp(String.format("rtsp://%s:%s/rtp/%s", mediaServerConfig.getWanIp(), mediaServerConfig.getRtspPort(), streamId));
+        if (internetIp != null) {
+            streamInfo.setFlv(String.format("https://%s:%s/rtp/%s.flv", internetIp, internetPort, streamId));
+            streamInfo.setWs_flv(String.format("wss://%s:%s/rtp/%s.flv", internetIp, internetPort, streamId));
+        } else {
+            streamInfo.setFlv(String.format("http://%s:%s/rtp/%s.flv", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
+            streamInfo.setWs_flv(String.format("ws://%s:%s/rtp/%s.flv", mediaServerConfig.getWanIp(), mediaServerConfig.getHttpPort(), streamId));
+        }
 
         return streamInfo;
     }

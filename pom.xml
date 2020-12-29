@@ -194,10 +194,29 @@
 			<artifactId>okhttp</artifactId>
 			<version>4.9.0</version>
 		</dependency>
+
+        <dependency>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>wagon-maven-plugin</artifactId>
+            <version>2.0.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.maven.wagon</groupId>
+                    <artifactId>wagon-ssh</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
     </dependencies>
 	
 	<build>
 		<finalName>wvp-2.5.8</finalName>
+        <extensions>
+            <extension>
+                <groupId>org.apache.maven.wagon</groupId>
+                <artifactId>wagon-ssh</artifactId>
+                <version>3.4.2</version>
+            </extension>
+        </extensions>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
@@ -220,6 +239,37 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 			</plugin>
 
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>wagon-maven-plugin</artifactId>
+                <version>1.0</version>
+                <executions>
+                    <execution>
+                        <id>upload-deploy</id>
+                        <!-- 运行package打包的同时运行upload-single和sshexec -->
+                        <phase>package</phase>
+                        <goals>
+                            <goal>upload-single</goal>
+                            <goal>sshexec</goal>
+                        </goals>
+                        <configuration>
+                            <!-- 要上传到服务器的文件，一般来说是jar或者war包 -->
+                            <fromFile>target/wvp-2.5.8.jar</fromFile>
+                            <!-- 配置服务器的地址以及文件上传的目录。 -->
+                            <!-- 如果2.1 serverId配置省略了，可以这么写：
+                            scp://user:password@192.168.1.1/home/project_name/	-->
+                            <url>scp://admin:shuolian18@192.168.18.56/home/admin/sl</url>
+                            <commands>
+                                <!-- 启动/重启jar包的shell脚本，需要自己编写，放在/home/project_name 目录下即可-->
+                                <command>sh /home/admin/sl/start.sh</command>
+                            </commands>
+                            <!-- 显示运行命令的输出结果 -->
+                            <displayCommandOutputs>true</displayCommandOutputs>
+                        </configuration>
+                    </execution>
+                </executions>
+
+            </plugin>
 		</plugins>
 	</build>
 </project>

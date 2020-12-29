@@ -197,7 +197,7 @@
 					method: 'get',
 					url: '/api/play/' + deviceId + '/' + channelId
 				}).then(function(res) {
-					let ssrc = res.data.ssrc;
+					let ssrc = res.data.streamId;
 					that.$refs.devicePlayer.play(ssrc,deviceId,channelId);
 				}).catch(function(e) {
 				});
